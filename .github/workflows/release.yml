@@ -33,6 +33,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
             tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-            files: bin/Release/**/*.dll
+            files: bin/Release/netstandard2.0/WobblyMenu.dll
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
