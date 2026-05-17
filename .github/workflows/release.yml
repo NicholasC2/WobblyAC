@@ -1,6 +1,7 @@
 name: Build and Release DLL
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
