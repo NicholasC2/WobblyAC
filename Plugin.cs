@@ -24,7 +24,7 @@ namespace WobblyMenu
         private const int VARIABLE_WINDOW_ID = 1;
         private const int ITEM_EDITOR_WINDOW_ID = 2;
 
-        private string currentlySelectedItem = null;
+        private GameObject currentlySelectedItem = null;
         private bool isItemEditorOpen = false;
         private int itemSpawnAmount = 1;
         private bool isMenuVisible = true;
@@ -36,10 +36,8 @@ namespace WobblyMenu
         private GUIStyle leftButtonStyle;
         private bool guiInit;
 
-        private List<string> assets = new List<string>();
-
-        private List<string> cachedComponentNames = new List<string>();
-        private bool componentsLoaded = false;
+        private List<GameObject> assets = new List<GameObject>();
+        private readonly object assetLock = new object();
 
         void Awake()
         {
@@ -56,21 +54,33 @@ namespace WobblyMenu
             {
                 foreach (var key in locator.Keys)
                 {
-                    string parsedKey = key.ToString().ToLower();
+                        Addressables.LoadAssetAsync<GameObject>(key.ToString()).Completed += handle =>
+                        {
+                            if (handle.Status != AsyncOperationStatus.Succeeded || handle.Result == null)
+                            {
+                                Debug.LogError("Failed to load: " + key.ToString());
+                                return;
+                            }
 
-                    if (parsedKey.EndsWith(".prefab") || parsedKey.EndsWith(".asset"))
-                        assets.Add(key.ToString());
+                            GameObject prefab = handle.Result;
+
+                            if (prefab.GetComponent<HawkTransformSync>() != null)
+                            {
+                                lock (assetLock)
+                                {
+                                    assets.Add(prefab);
+                                }
+                            }
+                        };
                 }
             }
-
-            Debug.Log($"Collected {assets.Count} addressable keys");
         }
 
         void Update()
         {
             spawnMenuWindowRect = new Rect(20, 20, 200, Screen.height - 40);
             itemEditorWindowRect = new Rect(250, 20, 250, 400);
-            variableMenuWindowRect = new Rect(Screen.width - 220, 20, 200, Screen.height - 40);
+            // variableMenuWindowRect = new Rect(Screen.width - 220, 20, 200, Screen.height - 40);
 
             if (Input.GetKeyDown(KeyCode.Insert))
                 isMenuVisible = !isMenuVisible;
@@ -87,38 +97,6 @@ namespace WobblyMenu
             };
 
             guiInit = true;
-        }
-
-        void LoadSelectedItemComponents()
-        {
-            cachedComponentNames.Clear();
-            componentsLoaded = false;
-
-            if (string.IsNullOrEmpty(currentlySelectedItem))
-                return;
-
-            Addressables.LoadAssetAsync<GameObject>(currentlySelectedItem).Completed += handle =>
-            {
-                if (handle.Status != AsyncOperationStatus.Succeeded || handle.Result == null)
-                {
-                    Debug.LogError("Failed to load: " + currentlySelectedItem);
-                    componentsLoaded = true;
-                    return;
-                }
-
-                GameObject prefab = handle.Result;
-
-                var comps = prefab.GetComponents<Component>();
-                foreach (var c in comps)
-                {
-                    if (c == null) continue;
-                    cachedComponentNames.Add(c.GetType().Name);
-                }
-
-                componentsLoaded = true;
-
-                Addressables.Release(handle);
-            };
         }
 
         void OnGUI()
@@ -160,17 +138,10 @@ namespace WobblyMenu
             itemEditorSearch = GUILayout.TextField(itemEditorSearch);
 
             itemEditorScrollPosition = GUILayout.BeginScrollView(itemEditorScrollPosition);
-
-            if (!componentsLoaded)
+            
+            foreach(Component component in currentlySelectedItem.GetComponents<Component>())
             {
-                GUILayout.Label("Loading components...");
-            }
-            else
-            {
-                foreach (var name in cachedComponentNames)
-                {
-                    GUILayout.Label(name);
-                }
+                GUILayout.Label(component.name);
             }
 
             GUILayout.EndScrollView();
@@ -193,20 +164,7 @@ namespace WobblyMenu
                     {
                         Vector3 spawnPos = pos + new Vector3(0, 1f + i * 0.5f, 0);
 
-                        NetworkPrefab.SpawnNetworkPrefab(
-                            currentlySelectedItem,
-                            obj =>
-                            {
-                                if (!obj) return;
-
-                                foreach (var c in obj.GetComponents<Component>())
-                                {
-                                    if (c) Debug.Log(c.GetType().Name);
-                                }
-                            },
-                            spawnPos,
-                            Quaternion.identity
-                        );
+                        Instantiate(currentlySelectedItem, spawnPos, new Quaternion());
                     }
                 }
             }
@@ -215,8 +173,6 @@ namespace WobblyMenu
             {
                 isItemEditorOpen = false;
                 currentlySelectedItem = null;
-                cachedComponentNames.Clear();
-                componentsLoaded = false;
             }
 
             GUI.DragWindow();
@@ -234,22 +190,23 @@ namespace WobblyMenu
             int maxDraw = 200;
             int drawn = 0;
 
-            foreach (string key in assets)
+            List<GameObject> snapshot;
+            lock (assetLock)
+            {
+                snapshot = new List<GameObject>(assets);
+            }
+
+            foreach (GameObject obj in snapshot)
             {
                 if (drawn >= maxDraw) break;
 
-                if (string.IsNullOrEmpty(key))
+                if (!obj.name.ToLower().Contains(search))
                     continue;
 
-                if (!key.ToLower().Contains(search))
-                    continue;
-
-                if (GUILayout.Button(key, leftButtonStyle))
+                if (GUILayout.Button(obj.name, leftButtonStyle))
                 {
-                    currentlySelectedItem = key;
+                    currentlySelectedItem = obj;
                     isItemEditorOpen = true;
-
-                    LoadSelectedItemComponents();
                 }
 
                 drawn++;
