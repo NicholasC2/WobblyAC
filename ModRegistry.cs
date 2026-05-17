@@ -1,24 +1,80 @@
-using Rewired;
-using UnityEngine;
-
 public static class ModRegistry
 {
     public static void RegisterAll()
     {
-        RegisterVariables();
-    }
+        VariableRegistry.Register(new Variable(
+            "playerMoney",
+            () =>
+            {
+                var gi = UnitySingleton<GameInstance>.Instance;
+                if (!gi) return 0;
 
-    public static void RegisterVariables()
-    {
-        // var players = UnitySingleton<GameInstance>.Instance.GetLocalPlayerControllers();
+                var player = gi.GetFirstLocalPlayerController();
+                if (!player) return 0;
 
-        // foreach(PlayerController player in players)
-        // {
-        //     if (!player) continue;
+                var emp = player.GetComponent<PlayerControllerEmployment>();
+                if (!emp) return 0;
 
-        //     Transform t = player.GetPlayerTransform();
-            
-        //     VariableRegistry.Register(new Variable("pos-x", t, "position"));
-        // }
+                return emp.GetLocalMoney();
+            },
+            v =>
+            {
+                var gi = UnitySingleton<GameInstance>.Instance;
+                if (!gi) return;
+
+                var player = gi.GetFirstLocalPlayerController();
+                if (!player) return;
+
+                var emp = player.GetComponent<PlayerControllerEmployment>();
+                if (!emp) return;
+
+                int current = emp.GetLocalMoney();
+                int target = (int)v;
+
+                int delta = target - current;
+
+                if (delta != 0)
+                    emp.UpdateMoney(delta);
+            },
+            typeof(int)
+        ));
+    
+        
+        VariableRegistry.Register(new Variable(
+            "playerSpaceMoney",
+            () =>
+            {
+                var gi = UnitySingleton<GameInstance>.Instance;
+                if (!gi) return 0;
+
+                var player = gi.GetFirstLocalPlayerController();
+                if (!player) return 0;
+
+                var emp = player.GetComponent<SpacePlayerControllerEmployment>();
+                if (!emp) return 0;
+
+                return emp.GetLocalMoney();
+            },
+            v =>
+            {
+                var gi = UnitySingleton<GameInstance>.Instance;
+                if (!gi) return;
+
+                var player = gi.GetFirstLocalPlayerController();
+                if (!player) return;
+
+                var emp = player.GetComponent<SpacePlayerControllerEmployment>();
+                if (!emp) return;
+
+                int current = emp.GetLocalMoney();
+                int target = (int)v;
+
+                int delta = target - current;
+
+                if (delta != 0)
+                    emp.UpdateMoney(delta);
+            },
+            typeof(int)
+        ));
     }
 }

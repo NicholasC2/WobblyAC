@@ -10,7 +10,7 @@ public static class FieldUtility
     public static EditableField[] GetFields(object obj)
     {
         if (obj == null)
-            return new EditableField[0];
+            return Array.Empty<EditableField>();
 
         Type type = obj.GetType();
 
@@ -19,15 +19,27 @@ public static class FieldUtility
             List<MemberInfo> list = new List<MemberInfo>();
 
             BindingFlags flags =
+                BindingFlags.Instance |
                 BindingFlags.Public |
-                BindingFlags.NonPublic |
-                BindingFlags.Instance;
+                BindingFlags.NonPublic;
 
             list.AddRange(type.GetFields(flags));
-            list.AddRange(type.GetProperties(flags));
+
+            foreach (var prop in type.GetProperties(flags))
+            {
+                if (!prop.CanRead || !prop.CanWrite)
+                    continue;
+
+                if (prop.GetIndexParameters().Length > 0)
+                    continue;
+
+                if (prop.DeclaringType == typeof(UnityEngine.Object))
+                    continue;
+
+                list.Add(prop);
+            }
 
             members = list.ToArray();
-
             cache[type] = members;
         }
 

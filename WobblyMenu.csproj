@@ -52,6 +52,10 @@
     <Reference Include="Game">
       <HintPath>libs/Game.dll</HintPath>
     </Reference>
+
+    <Reference Include="Space">
+      <HintPath>libs/Space.dll</HintPath>
+    </Reference>
     
     <Reference Include="Unity.ResourceManager">
       <HintPath>libs/Unity.ResourceManager.dll</HintPath>

@@ -33,11 +33,15 @@ namespace WobblyMenu
         private string itemEditorSearch = "";
         private string variableSearch = "";
 
+        private int moneyAmount = 10;
+
         private GUIStyle leftButtonStyle;
         private bool guiInit;
 
         private List<GameObject> assets = new List<GameObject>();
-        private readonly object assetLock = new object();
+        private HashSet<GameObject> loadedAssets = new HashSet<GameObject>();
+
+        private static Dictionary<string, string> variableEditCache = new Dictionary<string, string>();
 
         void Awake()
         {
@@ -66,7 +70,7 @@ namespace WobblyMenu
 
                             if (prefab.GetComponent<HawkTransformSync>() != null)
                             {
-                                lock (assetLock)
+                                if (loadedAssets.Add(prefab))
                                 {
                                     assets.Add(prefab);
                                 }
@@ -80,7 +84,7 @@ namespace WobblyMenu
         {
             spawnMenuWindowRect = new Rect(20, 20, 200, Screen.height - 40);
             itemEditorWindowRect = new Rect(250, 20, 250, 400);
-            // variableMenuWindowRect = new Rect(Screen.width - 220, 20, 200, Screen.height - 40);
+            variableMenuWindowRect = new Rect(Screen.width - 220, 20, 200, Screen.height - 40);
 
             if (Input.GetKeyDown(KeyCode.Insert))
                 isMenuVisible = !isMenuVisible;
@@ -121,15 +125,71 @@ namespace WobblyMenu
 
             variableScrollPosition = GUILayout.BeginScrollView(variableScrollPosition);
 
+            GUILayout.BeginVertical("box");
+
             foreach (var variable in VariableRegistry.Variables)
             {
                 var value = variable.GetValue();
-                if (value != null)
-                    Drawer.DrawObject(value, variableSearch);
+                if (value == null) continue;
+
+                string key = variable.name;
+
+                string displayValue = value.ToString();
+
+                if (!variableEditCache.TryGetValue(key, out string text))
+                {
+                    text = displayValue;
+                }
+
+                GUILayout.BeginHorizontal();
+
+                GUILayout.Label(variable.name, GUILayout.Width(120));
+
+                string newText = GUILayout.TextField(text);
+                variableEditCache[key] = newText;
+
+                if (newText == displayValue)
+                {
+                    variableEditCache[key] = displayValue;
+                }
+
+                if (newText != displayValue)
+                {
+                    try
+                    {
+                        if (variable.type == typeof(int) && int.TryParse(newText, out int i))
+                            variable.SetValue(i);
+
+                        else if (variable.type == typeof(float) && float.TryParse(newText, out float f))
+                            variable.SetValue(f);
+
+                        else if (variable.type == typeof(string))
+                            variable.SetValue(newText);
+                    }
+                    catch { }
+                }
+
+                GUILayout.EndHorizontal();
             }
 
+            GUILayout.EndVertical();
+
             GUILayout.EndScrollView();
-            GUI.DragWindow();
+        }
+
+        void CopyComponentValues(Component source, Component target)
+        {
+            var fields = source.GetType().GetFields(
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.Instance);
+
+            foreach (var field in fields)
+            {
+                if (field.IsStatic) continue;
+
+                field.SetValue(target, field.GetValue(source));
+            }
         }
 
         void DrawItemEditorWindow(int id)
@@ -139,9 +199,27 @@ namespace WobblyMenu
 
             itemEditorScrollPosition = GUILayout.BeginScrollView(itemEditorScrollPosition);
             
-            foreach(Component component in currentlySelectedItem.GetComponents<Component>())
+            foreach (Component component in currentlySelectedItem.GetComponents<Component>())
             {
-                GUILayout.Label(component.name);
+                if (component == null)
+                    continue;
+
+                if(component is MoneyBag moneyBag)
+                {
+                    GUILayout.BeginVertical("box");
+
+                    GUILayout.Label(component.GetType().Name);
+
+                    GUILayout.BeginHorizontal();
+
+                    GUILayout.Label("Money Amount");
+
+                    int.TryParse(GUILayout.TextField(moneyAmount.ToString()), out moneyAmount);
+
+                    GUILayout.EndHorizontal();
+                    
+                    GUILayout.EndVertical();
+                }
             }
 
             GUILayout.EndScrollView();
@@ -164,7 +242,18 @@ namespace WobblyMenu
                     {
                         Vector3 spawnPos = pos + new Vector3(0, 1f + i * 0.5f, 0);
 
-                        Instantiate(currentlySelectedItem, spawnPos, new Quaternion());
+                        GameObject instance = Instantiate(currentlySelectedItem, spawnPos, Quaternion.identity);
+
+                        foreach (Component component in instance.GetComponents<Component>())
+                        {
+                            if (component == null)
+                                continue;
+
+                            if(component is MoneyBag moneyBag)
+                            {
+                                moneyBag.SetMoney(moneyAmount);
+                            }
+                        }
                     }
                 }
             }
@@ -174,8 +263,6 @@ namespace WobblyMenu
                 isItemEditorOpen = false;
                 currentlySelectedItem = null;
             }
-
-            GUI.DragWindow();
         }
 
         void DrawSpawnMenuWindow(int id)
@@ -190,13 +277,7 @@ namespace WobblyMenu
             int maxDraw = 200;
             int drawn = 0;
 
-            List<GameObject> snapshot;
-            lock (assetLock)
-            {
-                snapshot = new List<GameObject>(assets);
-            }
-
-            foreach (GameObject obj in snapshot)
+            foreach (GameObject obj in assets)
             {
                 if (drawn >= maxDraw) break;
 
@@ -213,7 +294,6 @@ namespace WobblyMenu
             }
 
             GUILayout.EndScrollView();
-            GUI.DragWindow();
         }
     }
 }
