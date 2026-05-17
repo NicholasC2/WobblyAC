@@ -8,6 +8,8 @@ obj/
 *.user
 *.cache
 
+Local.props
+
 .vscode/
 .vs/
 *.suo
